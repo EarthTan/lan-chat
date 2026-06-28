@@ -216,6 +216,75 @@
     @media (prefers-reduced-motion: reduce) {
       .boot-dots span { animation: none; opacity: 0.6; }
     }
+
+    /* ── Header ───────────────────────────────────────────── */
+    .app-header {
+      height: 40px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--bg-elev);
+      border-bottom: 1px solid var(--line);
+    }
+    .app-header__left,
+    .app-header__right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .brand {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .online {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .online__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 2px rgba(124, 255, 178, 0.15);
+    }
+    .device-badge {
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      padding: 4px 8px;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .clip-btn {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      border: 1px solid var(--line);
+      padding: 0 12px;
+      min-height: 44px;
+      transition: color 120ms ease-out, border-color 120ms ease-out;
+    }
+    .clip-btn:hover {
+      color: var(--amber);
+      border-color: var(--amber);
+    }
+    @media (max-width: 420px) {
+      .online__label,
+      .device-badge { display: none; }
+      .clip-btn::before { content: '[ · ]'; }
+      .clip-btn { font-size: 0; padding: 0 10px; }
+      .clip-btn:hover::before { color: var(--amber); }
+    }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -263,28 +332,18 @@
   </div>
 
   <!-- ── Header ── -->
-  <header class="shrink-0 h-[52px] bg-[#141414] border-b border-white/[0.05] px-4 flex items-center justify-between gap-3">
-    <div class="flex items-center gap-2.5 min-w-0">
-      <div class="relative shrink-0">
-        <div class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-xs">💬</div>
-        <span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full border-2 border-[#141414]"></span>
-      </div>
-      <span class="font-semibold text-[15px] truncate">LAN Chat</span>
+  <header id="header" class="app-header">
+    <div class="app-header__left">
+      <span class="caret" aria-hidden="true"></span>
+      <span class="brand">LAN-CHAT/0</span>
+      <span class="online" aria-live="polite">
+        <span class="online__dot" aria-hidden="true"></span>
+        <span class="online__label">online</span>
+      </span>
     </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <span id="myBadge"
-        class="text-[11px] text-gray-500 bg-white/[0.05] border border-white/[0.07] rounded-full px-2.5 py-0.5 max-w-[96px] truncate"></span>
-      <button onclick="openClip()"
-        class="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-violet-300
-               bg-white/[0.05] hover:bg-violet-900/25 border border-white/[0.07] hover:border-violet-500/30
-               rounded-full px-3 py-1.5 transition-all duration-150 select-none">
-        <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2
-               M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-        </svg>
-        <span class="hidden xs:inline">分享剪贴板</span>
-      </button>
+    <div class="app-header__right">
+      <span id="myBadge" class="device-badge">[anonymous]</span>
+      <button id="clipBtn" type="button" class="clip-btn">[ CLIP ]</button>
     </div>
   </header>
 
