@@ -15,13 +15,17 @@
 
   <style>
     :root {
-      --bg:      #0A0A0A;
-      --bg-elev: #111211;
-      --line:    #1F201D;
-      --amber:   #FFB000;
-      --green:   #7CFFB2;
-      --text:    #D9D6CC;
-      --muted:   #5C5D54;
+      --bg:        #0A0A0A;
+      --bg-elev:   #111211;
+      --line:      #1F201D;
+      --line-soft: #15160F;
+      --amber:     #FFB000;
+      --green:     #7CFFB2;
+      --text:      #D9D6CC;
+      --muted:     #5C5D54;
+
+      /* Single easing — sharp in, gentle out. Everything transitions through this. */
+      --ease: cubic-bezier(0.2, 0, 0, 1);
 
       --mono: "JetBrains Mono", Menlo, Consolas, "Courier New", monospace,
               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
@@ -59,6 +63,7 @@
     :focus-visible {
       outline: 1px solid var(--amber);
       outline-offset: 2px;
+      transition: outline-offset 140ms var(--ease);
     }
 
     /* ── Keyframes ─────────────────────────────────────────── */
@@ -76,9 +81,18 @@
     }
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
-      25%      { transform: translateX(-3px); }
-      50%      { transform: translateX(3px); }
-      75%      { transform: translateX(-2px); }
+      25%      { transform: translateX(-4px); }
+      50%      { transform: translateX(4px); }
+      75%      { transform: translateX(-3px); }
+    }
+    @keyframes caretPulse {
+      0%   { opacity: 0; transform: scaleY(0.4); }
+      40%  { opacity: 1; transform: scaleY(1); }
+      100% { opacity: 1; transform: scaleY(1); }
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translate(-50%, 4px); }
+      to   { opacity: 1; transform: translate(-50%, 0); }
     }
 
     /* ── The signature caret ───────────────────────────────── */
@@ -188,7 +202,7 @@
       color: var(--text);
       caret-color: transparent;
     }
-    .setup-input.shake { animation: shake 120ms ease-in-out; }
+    .setup-input.shake { animation: shake 240ms var(--ease); }
 
     .setup-foot {
       display: flex;
@@ -208,7 +222,7 @@
       font-size: 12px;
       padding: 10px 14px;
       min-height: 44px;
-      transition: filter 120ms ease-out;
+      transition: filter 140ms var(--ease), transform 140ms var(--ease);
     }
     .btn-primary:hover  { filter: brightness(1.1); }
     .btn-primary:active { transform: translateY(1px); }
@@ -272,12 +286,15 @@
       border: 1px solid var(--line);
       padding: 0 12px;
       min-height: 44px;
-      transition: color 120ms ease-out, border-color 120ms ease-out;
+      transition: color 140ms var(--ease), border-color 140ms var(--ease);
     }
     .clip-btn:hover {
       color: var(--amber);
       border-color: var(--amber);
     }
+    /* The header caret is the brand glyph in its resting state. */
+    .app-header__left .caret { transform-origin: bottom; }
+    .app-header__left .caret--enter { animation: caretPulse 260ms var(--ease) both; }
     @media (max-width: 420px) {
       .online__label,
       .device-badge { display: none; }
@@ -331,7 +348,9 @@
       border-bottom: 0;
     }
     .row + .row { margin-top: 0; }
-    .row--in { animation: rowIn 100ms ease-out both; }
+    .row--in { animation: rowIn 160ms var(--ease) both; }
+    .row--in .row__head  { animation: rowIn 160ms var(--ease) 40ms both; }
+    .row--in .row__body  { animation: rowIn 180ms var(--ease) 90ms both; }
 
     .row__head {
       display: flex;
@@ -346,7 +365,7 @@
     .row__rule {
       flex: 1 1 auto;
       height: 1px;
-      background: var(--line);
+      background: var(--line-soft);
       min-width: 12px;
     }
     .row__chip {
@@ -355,6 +374,12 @@
       border: 1px solid var(--green);
       padding: 0 5px;
       line-height: 14px;
+      /* The [clip] chip gets an inner-dash pattern — feels more "pasted". */
+      background-image: repeating-linear-gradient(
+        90deg,
+        transparent 0 3px,
+        rgba(124, 255, 178, 0.18) 3px 4px
+      );
     }
 
     .row__body {
@@ -366,6 +391,30 @@
       color: var(--text);
       user-select: text;
     }
+    .row__body a,
+    .row__body .row__url {
+      color: inherit;
+      text-decoration: underline dotted var(--muted);
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+    .row__body a:hover,
+    .row__body .row__url:hover { text-decoration-style: solid; }
+
+    /* The signature risk: outgoing rows are marked by the amber caret glyph
+       aligned to the timestamp column. No avatar, no "you" label. */
+    .row--me { position: relative; }
+    .row--me .row__caret-mark {
+      display: inline-block;
+      width: 3px;
+      height: 16px;
+      background: var(--amber);
+      vertical-align: text-bottom;
+      margin-right: 8px;
+      transform-origin: bottom;
+      animation: caretPulse 220ms var(--ease) both;
+    }
+
     .row--me   .row__body { color: var(--amber); }
     .row--clip .row__body {
       color: var(--green);
@@ -377,56 +426,76 @@
       font-size: 10px;
       color: var(--muted);
       opacity: 0;
-      transition: opacity 120ms ease-out;
+      transition: opacity 140ms var(--ease);
     }
     .row:hover .row__meta { opacity: 1; }
+    .row__meta-copy {
+      cursor: pointer;
+      transition: color 140ms var(--ease);
+    }
+    .row__meta-copy:hover { color: var(--amber); }
+    .row__meta-copy[data-copied="1"] { color: var(--green); }
 
-    /* ── Input bar ────────────────────────────────────────── */
+    /* ── Input bar — embedded in the log ────────────────── */
     .input-bar {
       flex: 0 0 auto;
-      background: var(--bg-elev);
-      border-top: 1px solid var(--line);
-      padding: 8px 16px 12px;
+      background: var(--bg);
+      padding: 12px 20px 16px;
+      position: relative;
     }
-    .input-bar__line {
+    /* The only separator from the log: a hairline that turns amber on focus. */
+    .input-bar::after {
+      content: "";
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 0;
+      height: 1px;
+      background: var(--line);
+      transition: background 140ms var(--ease);
+    }
+    .input-bar:focus-within::after { background: var(--amber); }
+
+    .input-bar__row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 44px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--line);
-      transition: border-color 120ms ease-out;
+      flex-wrap: wrap;
+      gap: 4px 8px;
     }
-    .input-bar__line:focus-within { border-bottom-color: var(--amber); }
-    .input-bar__caret { flex: 0 0 auto; }
-    .input-bar__name {
-      font-size: 11px;
-      color: var(--muted);
-      font-weight: 500;
-    }
-    .input-bar__chev {
-      color: var(--amber);
-      font-weight: 500;
-    }
+
     #inp {
       flex: 1 1 auto;
       min-width: 0;
       font-size: 13px;
       color: var(--text);
-      caret-color: transparent;
+      caret-color: var(--amber);
       padding: 2px 0;
-      min-height: auto;
+      min-height: 22px;
+      line-height: 1.55;
     }
+
     .input-bar__send {
+      flex: 0 0 auto;
       font-size: 12px;
       font-weight: 700;
       color: var(--amber);
-      padding: 0 8px;
+      padding: 0;
       min-height: 44px;
-      transition: opacity 120ms ease-out;
+      opacity: 0.25;
+      transition: opacity 140ms var(--ease);
     }
-    .input-bar__send[hidden] { display: none; }
+    .input-bar__send[data-ready="1"] { opacity: 1; }
 
+    .input-bar__count {
+      flex: 0 0 auto;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0;
+      transition: opacity 140ms var(--ease);
+      pointer-events: none;
+    }
+    .input-bar__count[data-show="1"] { opacity: 1; }
+    .input-bar__count[data-warn="1"] { color: var(--amber); }
     /* ── Clipboard modal ───────────────────────────────────── */
     .modal {
       position: fixed;
@@ -511,7 +580,7 @@
       font-weight: 500;
       padding: 10px 12px;
       min-height: 44px;
-      transition: color 120ms ease-out;
+      transition: color 140ms var(--ease);
     }
     .btn-ghost:hover { color: var(--text); }
     .clip-send { min-height: 44px; }
@@ -531,9 +600,10 @@
       padding: 6px 12px;
       white-space: nowrap;
       opacity: 0;
-      transition: opacity 120ms ease-out;
     }
-    .toast[data-show="1"] { opacity: 1; }
+    .toast[data-show="1"] {
+      animation: toastIn 180ms var(--ease) both;
+    }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -544,7 +614,7 @@
       <div class="setup-head">
         <span>LAN-CHAT/0</span>
         <span class="setup-head__rule"></span>
-        <span class="setup-head__ver">v1.0.0</span>
+        <span class="setup-head__ver">b.1.0.0</span>
       </div>
 
       <div class="setup-boot">
@@ -613,8 +683,9 @@
       <span class="input-bar__chev">›</span>
       <input id="inp" type="text" autocomplete="off" spellcheck="false"
              aria-label="message">
-      <button id="sendGlyph" type="button" class="input-bar__send" hidden>[ ↵ ]</button>
+      <button id="sendGlyph" type="button" class="input-bar__send" aria-label="send message">[ ↵ ]</button>
     </div>
+    <span id="inpCount" class="input-bar__count" aria-hidden="true"></span>
   </footer>
 
   <!-- ── Clipboard modal ── -->
@@ -655,6 +726,17 @@
   });
 
   // ── Init ─────────────────────────────────────────────────
+  // Boot helpers hoisted so socket.on('connect') can mark boot3 OK too.
+  const bootTagFor  = id => document.querySelector(`#${id} .boot-tag`);
+  const bootDotsFor = id => document.querySelectorAll(`#${id} .boot-dots span`);
+  const bootSetOk = id => {
+    const t = bootTagFor(id);
+    if (!t) return;
+    t.textContent = '[ OK ]';
+    t.dataset.state = 'ok';
+    bootDotsFor(id).forEach(d => d.style.animation = 'none');
+  };
+
   addEventListener('DOMContentLoaded', () => {
     const saved = localStorage.getItem('lc-name');
     if (saved) {
@@ -663,28 +745,31 @@
       if (badge) badge.textContent = ME;
       document.getElementById('setup').style.display = 'none';
     } else {
-      const ua = navigator.userAgent;
-      let hint = '我的设备';
-      if (/Mac OS X/.test(ua) && !/iPhone|iPad/.test(ua)) hint = 'Alex 的 Mac';
-      else if (/Linux/.test(ua))   hint = 'Ubuntu';
-      else if (/Windows/.test(ua)) hint = '我的 PC';
+      // Default hint only on desktop — mobile gets an empty prompt.
+      const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+      let hint = '';
+      if (!isMobile) {
+        const ua = navigator.userAgent;
+        if (/Mac OS X/.test(ua))           hint = 'Alex 的 Mac';
+        else if (/Linux/.test(ua))         hint = 'Ubuntu';
+        else if (/Windows/.test(ua))       hint = '我的 PC';
+        else                               hint = '我的设备';
+      }
       const inp = document.getElementById('nameIn');
-      inp.value = hint;
+      if (hint) {
+        inp.value = hint;
+        inp.setSelectionRange(hint.length, hint.length);
+      } else {
+        inp.placeholder = 'name this terminal';
+      }
       inp.focus();
-      inp.setSelectionRange(hint.length, hint.length);
 
       // ── Boot sequence ────────────────────────────────────
-      const tagFor  = id => document.querySelector(`#${id} .boot-tag`);
-      const dotsFor = id => document.querySelectorAll(`#${id} .boot-dots span`);
-      const setOk = id => {
-        tagFor(id).textContent = '[ OK ]';
-        tagFor(id).dataset.state = 'ok';
-        dotsFor(id).forEach(d => d.style.animation = 'none');
-      };
-      setTimeout(() => setOk('boot1'), 120);
-      setTimeout(() => setOk('boot2'), 240);
-      // boot3 stays [..] until connect
-      tagFor('boot3').dataset.state = 'wait';
+      setTimeout(() => bootSetOk('boot1'), 120);
+      setTimeout(() => bootSetOk('boot2'), 240);
+      // boot3 stays [..] until the socket actually connects — see socket.on('connect') below.
+      const t = bootTagFor('boot3');
+      if (t) t.dataset.state = 'wait';
     }
   });
 
@@ -704,9 +789,15 @@
     const badge = document.getElementById('myBadge');
     if (badge) badge.textContent = ME;
     const s = document.getElementById('setup');
-    s.style.transition = 'opacity 160ms ease-out';
+    s.style.transition = 'opacity 160ms var(--ease)';
     s.style.opacity = '0';
     setTimeout(() => s.style.display = 'none', 180);
+    // The header caret pulses in — the signature glyph coming online.
+    const headCaret = document.querySelector('.app-header__left .caret');
+    if (headCaret) {
+      headCaret.classList.add('caret--enter');
+      setTimeout(() => headCaret.classList.remove('caret--enter'), 320);
+    }
     document.getElementById('inp').focus();
   }
 
@@ -719,6 +810,10 @@
   });
 
   // ── Socket ────────────────────────────────────────────────
+  socket.on('connect', () => {
+    const t = bootTagFor('boot3');
+    if (t && t.dataset.state !== 'ok') bootSetOk('boot3');
+  });
   socket.on('history', msgs => {
     msgs.forEach(m => render(m, false));
     scrollBottom();
@@ -729,6 +824,10 @@
   });
 
   // ── Send text ─────────────────────────────────────────────
+  // IME composition: while the user is mid-composition (Chinese/Japanese input),
+  // Enter must insert a candidate, not send. We track this with a flag.
+  let imeComposing = false;
+
   function sendMsg() {
     if (!ME) { toast('set a terminal name first'); return; }
     const inp  = document.getElementById('inp');
@@ -736,19 +835,36 @@
     if (!text) return;
     socket.emit('message', { text, device: ME, type: 'text' });
     inp.value = '';
-    document.getElementById('sendGlyph').hidden = true;
+    const send  = document.getElementById('sendGlyph');
+    const count = document.getElementById('inpCount');
+    send.dataset.ready = '0';
+    count.dataset.show = '0';
   }
 
   addEventListener('DOMContentLoaded', () => {
-    const inp = document.getElementById('inp');
-    const send = document.getElementById('sendGlyph');
+    const inp   = document.getElementById('inp');
+    const send  = document.getElementById('sendGlyph');
+    const count = document.getElementById('inpCount');
     const promptName = document.getElementById('promptName');
 
+    inp.addEventListener('compositionstart', () => { imeComposing = true; });
+    inp.addEventListener('compositionend',   () => { imeComposing = false; });
+
     inp.addEventListener('input', () => {
-      send.hidden = inp.value.length === 0;
+      const len = inp.value.length;
+      send.dataset.ready = len > 0 ? '1' : '0';
+      // Surface a quiet char count once the message gets long.
+      if (len >= 6000) {
+        count.textContent = `${len} / 8000`;
+        count.dataset.show = '1';
+        count.dataset.warn = len > 7500 ? '1' : '0';
+      } else {
+        count.dataset.show = '0';
+      }
     });
+
     inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !imeComposing && !e.isComposing) {
         e.preventDefault();
         sendMsg();
       }
@@ -805,17 +921,51 @@
   });
 
   // ── Copy ─────────────────────────────────────────────────
-  async function copyById(id, el) {
+  // Delegated handler — clicking the meta line on any row copies the raw text.
+  addEventListener('click', async (e) => {
+    const el = e.target.closest('.row__meta-copy');
+    if (!el) return;
+    const id = el.dataset.copyId;
     const text = txtById[id] ?? '';
     try {
       await navigator.clipboard.writeText(text);
-      toast('✓ 已复制到剪贴板');
-      el.textContent = '✓';
-      setTimeout(() => el.textContent = '复制', 1500);
-    } catch { toast('复制失败'); }
-  }
+      const prev = el.textContent;
+      el.dataset.copied = '1';
+      toast('copied');
+      el.textContent = '✓ copied';
+      setTimeout(() => {
+        el.textContent = prev;
+        delete el.dataset.copied;
+      }, 1200);
+    } catch {
+      toast('copy failed');
+    }
+  });
+  // Keyboard parity for the meta copy chip.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('.row__meta-copy');
+    if (!el) return;
+    e.preventDefault();
+    el.click();
+  });
 
   // ── Render message ────────────────────────────────────────
+  // URL matcher: http(s)://... or www.... — conservative, no path-trailing punctuation.
+  const URL_RE = /\b((?:https?:\/\/|www\.)[^\s<>"]+[^\s<>".])/gi;
+
+  function linkify(text) {
+    // Escape first, then replace URLs in the escaped string.
+    const esc = s => s
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const safe = esc(text);
+    return safe.replace(URL_RE, m => {
+      const href = /^https?:/i.test(m) ? m : `https://${m}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${m}</a>`;
+    });
+  }
+
   function render(msg, animate) {
     txtById[msg.id] = msg.text;
 
@@ -841,17 +991,24 @@
     row.className = `row ${role}${animate ? ' row--in' : ''}`;
     row.dataset.meta = meta;
 
-    const clipChip = isClip ? `<span class="row__chip">[clip]</span>` : '';
+    const clipChip  = isClip ? `<span class="row__chip">[clip]</span>` : '';
+    const meMark    = isMe  ? `<span class="row__caret-mark" aria-label="sent from this device"></span>` : '';
+
+    const headParts = [
+      `<span class="row__time">[${esc(time)}]</span>`,
+      meMark,
+      `<span class="row__device">${esc(msg.device)}</span>`,
+      clipChip,
+      `<span class="row__rule" aria-hidden="true"></span>`,
+    ].join('');
 
     row.innerHTML = `
-      <header class="row__head">
-        <span class="row__time">[${esc(time)}]</span>
-        <span class="row__device">${esc(msg.device)}</span>
-        ${clipChip}
-        <span class="row__rule" aria-hidden="true"></span>
-      </header>
-      <div class="row__body">${esc(msg.text)}</div>
-      <div class="row__meta">${meta}</div>
+      <header class="row__head">${headParts}</header>
+      <div class="row__body">${isClip ? esc(msg.text) : linkify(msg.text)}</div>
+      <div class="row__meta">
+        <span class="row__meta-copy" role="button" tabindex="0"
+              aria-label="copy message text" data-copy-id="${safeId}">${meta}</span>
+      </div>
     `;
     document.getElementById('msgs').appendChild(row);
   }
@@ -868,6 +1025,10 @@
   function toast(text) {
     const el = document.getElementById('toast');
     el.textContent = text;
+    // Restart the slide-in animation by toggling the attribute off-then-on.
+    el.dataset.show = '0';
+    // Force reflow so the next assignment re-triggers the animation.
+    void el.offsetWidth;
     el.dataset.show = '1';
     clearTimeout(toastTm);
     toastTm = setTimeout(() => { el.dataset.show = '0'; }, 1800);
