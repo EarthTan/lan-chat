@@ -677,15 +677,12 @@
 
   <!-- ── Input bar ── -->
   <footer class="input-bar">
-    <div class="input-bar__line">
-      <span class="caret input-bar__caret" aria-hidden="true"></span>
-      <span class="input-bar__name" id="promptName">anonymous</span>
-      <span class="input-bar__chev">›</span>
+    <div class="input-bar__row">
       <input id="inp" type="text" autocomplete="off" spellcheck="false"
              aria-label="message">
+      <span id="inpCount" class="input-bar__count" aria-hidden="true"></span>
       <button id="sendGlyph" type="button" class="input-bar__send" aria-label="send message">[ ↵ ]</button>
     </div>
-    <span id="inpCount" class="input-bar__count" aria-hidden="true"></span>
   </footer>
 
   <!-- ── Clipboard modal ── -->
@@ -845,7 +842,6 @@
     const inp   = document.getElementById('inp');
     const send  = document.getElementById('sendGlyph');
     const count = document.getElementById('inpCount');
-    const promptName = document.getElementById('promptName');
 
     inp.addEventListener('compositionstart', () => { imeComposing = true; });
     inp.addEventListener('compositionend',   () => { imeComposing = false; });
@@ -870,9 +866,6 @@
       }
     });
     send.addEventListener('click', sendMsg);
-
-    const syncPrompt = () => { if (ME && promptName) promptName.textContent = ME; };
-    syncPrompt();
   });
 
   // ── Clipboard modal ───────────────────────────────────────
