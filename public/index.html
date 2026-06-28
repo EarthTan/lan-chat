@@ -380,6 +380,52 @@
       transition: opacity 120ms ease-out;
     }
     .row:hover .row__meta { opacity: 1; }
+
+    /* ── Input bar ────────────────────────────────────────── */
+    .input-bar {
+      flex: 0 0 auto;
+      background: var(--bg-elev);
+      border-top: 1px solid var(--line);
+      padding: 8px 16px 12px;
+    }
+    .input-bar__line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      transition: border-color 120ms ease-out;
+    }
+    .input-bar__line:focus-within { border-bottom-color: var(--amber); }
+    .input-bar__caret { flex: 0 0 auto; }
+    .input-bar__name {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .input-bar__chev {
+      color: var(--amber);
+      font-weight: 500;
+    }
+    #inp {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 13px;
+      color: var(--text);
+      caret-color: transparent;
+      padding: 2px 0;
+      min-height: auto;
+    }
+    .input-bar__send {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--amber);
+      padding: 0 8px;
+      min-height: 44px;
+      transition: opacity 120ms ease-out;
+    }
+    .input-bar__send[hidden] { display: none; }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -452,21 +498,14 @@
   </main>
 
   <!-- ── Input bar ── -->
-  <footer class="shrink-0 bg-[#141414] border-t border-white/[0.05] p-3">
-    <div class="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.07]
-                focus-within:border-blue-500/35 rounded-2xl px-4 py-2.5 transition-colors duration-200">
+  <footer class="input-bar">
+    <div class="input-bar__line">
+      <span class="caret input-bar__caret" aria-hidden="true"></span>
+      <span class="input-bar__name" id="promptName">anonymous</span>
+      <span class="input-bar__chev">›</span>
       <input id="inp" type="text" autocomplete="off" spellcheck="false"
-        placeholder="输入消息，Enter 发送…"
-        class="flex-1 bg-transparent outline-none text-sm text-white placeholder-gray-700 min-w-0 caret-blue-400"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}">
-      <button onclick="sendMsg()"
-        class="shrink-0 text-blue-500 hover:text-blue-400 active:scale-90 transition-all duration-100">
-        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
-          <path d="m3.478 2.405-2.44 16.374c-.168 1.38.97 2.35 2.23 1.75l17.5-8.33
-                   c1.18-.56 1.18-2.24 0-2.8L3.3 1.07C2.04.47.9 1.44 1.04 2.81l.24 1.6zm1.67 11.84
-                   L3.8 5.33l12.7 6.04-11.35.87z"/>
-        </svg>
-      </button>
+             aria-label="message">
+      <button id="sendGlyph" type="button" class="input-bar__send" hidden>[ ↵ ]</button>
     </div>
   </footer>
 
@@ -603,13 +642,34 @@
 
   // ── Send text ─────────────────────────────────────────────
   function sendMsg() {
-    if (!ME) { toast('请先设置设备名称'); return; }
+    if (!ME) { toast('set a terminal name first'); return; }
     const inp  = document.getElementById('inp');
     const text = inp.value.trim();
     if (!text) return;
     socket.emit('message', { text, device: ME, type: 'text' });
     inp.value = '';
+    document.getElementById('sendGlyph').hidden = true;
   }
+
+  addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('inp');
+    const send = document.getElementById('sendGlyph');
+    const promptName = document.getElementById('promptName');
+
+    inp.addEventListener('input', () => {
+      send.hidden = inp.value.length === 0;
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMsg();
+      }
+    });
+    send.addEventListener('click', sendMsg);
+
+    const syncPrompt = () => { if (ME && promptName) promptName.textContent = ME; };
+    syncPrompt();
+  });
 
   // ── Clipboard modal ───────────────────────────────────────
   function openClip() {
