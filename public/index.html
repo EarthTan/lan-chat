@@ -515,6 +515,25 @@
     }
     .btn-ghost:hover { color: var(--text); }
     .clip-send { min-height: 44px; }
+
+    /* ── Toast ────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 88px;
+      transform: translateX(-50%);
+      z-index: 60;
+      pointer-events: none;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 12px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 120ms ease-out;
+    }
+    .toast[data-show="1"] { opacity: 1; }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -621,10 +640,7 @@
   </div>
 
   <!-- ── Toast ── -->
-  <div id="toast"
-    class="fixed bottom-[72px] left-1/2 -translate-x-1/2 z-50 pointer-events-none
-           bg-[#242424] border border-white/10 text-xs text-gray-200
-           px-4 py-2 rounded-full shadow-xl opacity-0 transition-opacity duration-200 whitespace-nowrap"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
   // ────────────────────────────────────────────────────────
@@ -852,9 +868,9 @@
   function toast(text) {
     const el = document.getElementById('toast');
     el.textContent = text;
-    el.style.opacity = '1';
+    el.dataset.show = '1';
     clearTimeout(toastTm);
-    toastTm = setTimeout(() => el.style.opacity = '0', 2300);
+    toastTm = setTimeout(() => { el.dataset.show = '0'; }, 1800);
   }
   // ────────────────────────────────────────────────────────
   </script>
