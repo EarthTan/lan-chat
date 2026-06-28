@@ -426,6 +426,95 @@
       transition: opacity 120ms ease-out;
     }
     .input-bar__send[hidden] { display: none; }
+
+    /* ── Clipboard modal ───────────────────────────────────── */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal[hidden] { display: none; }
+    .modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .modal__sheet {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modal__title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .modal__close {
+      width: 28px;
+      height: 28px;
+      font-size: 18px;
+      color: var(--muted);
+      line-height: 1;
+    }
+    .modal__close:hover { color: var(--text); }
+
+    .clip-ta {
+      width: 100%;
+      min-height: 140px;
+      background: var(--bg);
+      border: 1px dashed var(--amber);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+      resize: vertical;
+      transition: border-style 120ms ease-out;
+    }
+    .clip-ta:focus { border-style: solid; }
+
+    .modal__foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .modal__hint {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .modal__actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-ghost {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 10px 12px;
+      min-height: 44px;
+      transition: color 120ms ease-out;
+    }
+    .btn-ghost:hover { color: var(--text); }
+    .clip-send { min-height: 44px; }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -510,41 +599,24 @@
   </footer>
 
   <!-- ── Clipboard modal ── -->
-  <div id="clipModal"
-    class="hidden fixed inset-0 z-40 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
-    onclick="if(event.target===this)closeClip()">
-    <div class="w-full max-w-md bg-[#1a1a1a] border border-white/[0.09] rounded-2xl p-5 space-y-4 shadow-2xl">
+  <div id="clipModal" class="modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__sheet" role="dialog" aria-modal="true" aria-labelledby="clipTitle">
+      <header class="modal__head">
+        <span class="modal__title" id="clipTitle">📋  CLIPBOARD.SHARE /tmp/peers</span>
+        <button type="button" class="modal__close" data-close aria-label="close">×</button>
+      </header>
 
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2 text-sm font-semibold">
-          <span class="text-violet-400 text-base">📋</span>
-          分享剪贴板内容
+      <textarea id="clipTA" class="clip-ta" rows="6" spellcheck="false"
+        placeholder="paste anything — code, url, notes. ⌘V / Ctrl+V"></textarea>
+
+      <footer class="modal__foot">
+        <span class="modal__hint">no network egress · LAN only</span>
+        <div class="modal__actions">
+          <button id="clipCancel" type="button" class="btn-ghost" data-close>[ CANCEL ]</button>
+          <button id="clipSend"   type="button" class="btn-primary clip-send">[ SEND ↵ ]</button>
         </div>
-        <button onclick="closeClip()"
-          class="w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:text-gray-300
-                 hover:bg-white/10 transition-colors text-lg leading-none">×</button>
-      </div>
-
-      <textarea id="clipTA" rows="6"
-        placeholder="在此粘贴内容（Ctrl+V / ⌘+V）…&#10;&#10;支持代码、URL、任意文本。&#10;内容将以紫色气泡发送给所有在线设备。"
-        class="w-full bg-black/40 border border-white/[0.08] focus:border-violet-500/50 rounded-xl
-               px-4 py-3 text-sm outline-none resize-none text-white/90 placeholder-gray-700
-               font-mono leading-relaxed transition-colors"></textarea>
-
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] text-gray-600">仅局域网内传输，不经过任何服务器</span>
-        <div class="flex gap-2">
-          <button onclick="closeClip()"
-            class="text-sm text-gray-500 hover:text-gray-200 px-4 py-2 rounded-lg transition-colors">
-            取消
-          </button>
-          <button onclick="sendClip()"
-            class="text-sm bg-violet-600 hover:bg-violet-500 active:scale-95 text-white
-                   font-semibold px-5 py-2 rounded-lg transition-all duration-150 shadow-lg shadow-violet-900/30">
-            发送
-          </button>
-        </div>
-      </div>
+      </footer>
     </div>
   </div>
 
@@ -673,9 +745,10 @@
 
   // ── Clipboard modal ───────────────────────────────────────
   function openClip() {
-    document.getElementById('clipModal').classList.remove('hidden');
-    const ta = document.getElementById('clipTA');
-    // Try auto-read (works only on localhost or HTTPS due to browser policy)
+    if (!ME) { toast('set a terminal name first'); return; }
+    const modal = document.getElementById('clipModal');
+    const ta    = document.getElementById('clipTA');
+    modal.hidden = false;
     if (navigator.clipboard?.readText) {
       navigator.clipboard.readText()
         .then(t => { if (t) ta.value = t; })
@@ -683,21 +756,36 @@
     }
     setTimeout(() => ta.focus(), 60);
   }
+
   function closeClip() {
-    document.getElementById('clipModal').classList.add('hidden');
-    document.getElementById('clipTA').value = '';
+    const modal = document.getElementById('clipModal');
+    const ta    = document.getElementById('clipTA');
+    modal.hidden = true;
+    if (ta) ta.value = '';
   }
+
   function sendClip() {
-    if (!ME) { toast('请先设置设备名称'); return; }
-    const text = document.getElementById('clipTA').value.trim();
-    if (!text) { toast('内容不能为空'); return; }
+    if (!ME) { toast('set a terminal name first'); return; }
+    const ta = document.getElementById('clipTA');
+    const text = ta.value.trim();
+    if (!text) { toast('nothing to send'); return; }
     socket.emit('message', { text, device: ME, type: 'clipboard' });
     closeClip();
-    toast('📋 剪贴板已发送');
+    toast('transmitted');
   }
-  // Close modal on Escape
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeClip();
+
+  addEventListener('DOMContentLoaded', () => {
+    document.getElementById('clipBtn').addEventListener('click', openClip);
+    document.getElementById('clipSend').addEventListener('click', sendClip);
+    document.getElementById('clipCancel').addEventListener('click', closeClip);
+
+    document.querySelectorAll('#clipModal [data-close]').forEach(el => {
+      el.addEventListener('click', closeClip);
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !document.getElementById('clipModal').hidden) closeClip();
+    });
   });
 
   // ── Copy ─────────────────────────────────────────────────
