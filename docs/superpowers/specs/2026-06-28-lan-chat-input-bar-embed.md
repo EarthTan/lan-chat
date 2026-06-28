@@ -88,8 +88,12 @@ ls -la█                                    [ ↵ ]
 }
 
 .input-bar__send {
-  /* sits to the right of the input via flex on .input-bar__row */
-  ...
+  /* existing rules retained — see Send glyph notes below */
+  flex: 0 0 auto;
+}
+.input-bar__count {
+  /* existing rules retained — see Char count notes below */
+  flex: 0 0 auto;
 }
 ```
 
@@ -99,22 +103,23 @@ ls -la█                                    [ ↵ ]
 .input-bar__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
-#inp { flex: 1 1 auto; min-width: 0; }
-.input-bar__send { flex: 0 0 auto; ... }
-.input-bar__count { flex: 0 0 auto; ... }
+#inp              { flex: 1 1 auto; min-width: 0; }
+.input-bar__send  { flex: 0 0 auto; }
+.input-bar__count { flex: 0 0 auto; }
 ```
 
-**Send glyph** (`[ ↵ ]`):
+**Send glyph** (`[ ↵ ]`) — existing rules retained, just consumed by the flex row:
 - Color `--amber`, font-weight 700, 12 px.
 - Idle: `opacity: 0.25` (present, but quiet).
 - Ready (`data-ready="1"`): `opacity: 1`.
-- No left padding — sits directly on the text baseline.
+- No left padding — sits directly on the text baseline via `flex: 0 0 auto`.
 
-**Char count**:
+**Char count** — existing rules retained, repositioned from absolute to inline flex item:
 - 11 px `--muted`.
-- Inline (flex item) instead of absolutely positioned at `bottom: 4px`.
+- Inline (flex item with `flex: 0 0 auto`) instead of absolutely positioned at `bottom: 4px`.
 - Surfaces only at `len ≥ 6000` with `data-show="1"`.
 - `data-warn="1"` (color `--amber`) at `len > 7500`.
 - On mobile widths (`max-width: 420px`), the count stays visible — the row has room.
@@ -183,7 +188,7 @@ This is a deliberate reduction in signature density, traded for stronger visual 
 
 - **IME composition (CJK input):** Native caret is restored. Composition indicator position is the browser's responsibility; we don't measure or replicate it. Behavior should match any other text input on the web.
 - **Long messages:** Char count at 6000 chars surfaces inline on the right. No overlap with `[ ↵ ]` because the input flexes (`flex: 1 1 auto; min-width: 0`) and shrinks to make room.
-- **Mobile:** Below 420 px the input row still has enough horizontal room for an inline char count + send glyph. If width gets pathological (< 360 px), the char count wraps below the input via `flex-wrap: wrap;` on `.input-bar__row`.
+- **Mobile:** Below 420 px the input row still has enough horizontal room for an inline char count + send glyph. `.input-bar__row` carries `flex-wrap: wrap;` so the count and send glyph wrap cleanly to a second line on very narrow widths (< 360 px) without overflowing.
 - **Focus rings:** Existing `:focus-visible` outline rule (1px `--amber`, 2px offset) still applies to the input on keyboard navigation. Touch focus keeps the amber hairline state.
 
 ---
