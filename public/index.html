@@ -285,6 +285,44 @@
       .clip-btn { font-size: 0; padding: 0 10px; }
       .clip-btn:hover::before { color: var(--amber); }
     }
+
+    /* ── Log region ───────────────────────────────────────── */
+    .log {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px 20px 24px;
+      scroll-behavior: smooth;
+    }
+    .log::-webkit-scrollbar         { width: 4px; }
+    .log::-webkit-scrollbar-thumb   { background: var(--line); }
+    .log::-webkit-scrollbar-track   { background: transparent; }
+
+    .log-empty {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-align: center;
+      color: var(--muted);
+      pointer-events: none;
+      user-select: none;
+    }
+    .log-empty__line {
+      margin: 0;
+      font-size: 13px;
+    }
+    .log-empty__host {
+      font-size: 12px;
+    }
+    .log-empty__block {
+      margin-top: 28px;
+      width: 64px;
+      height: 64px;
+    }
   </style>
 </head>
 <body style="display:flex;flex-direction:column;">
@@ -347,15 +385,12 @@
     </div>
   </header>
 
-  <!-- ── Message list ── -->
-  <main id="msgs" class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-2 scroll-smooth">
-    <div id="empty"
-      class="m-auto flex flex-col items-center gap-3 text-center opacity-25 pointer-events-none select-none">
-      <div class="text-4xl">📡</div>
-      <p class="text-sm text-gray-400 leading-relaxed">
-        在其他设备的浏览器中打开本机 IP<br>
-        <span class="font-mono text-xs text-gray-600">http://&lt;Ubuntu-IP&gt;:4242</span>
-      </p>
+  <!-- ── Log region ── -->
+  <main id="msgs" class="log" aria-live="polite" aria-label="message log">
+    <div id="empty" class="log-empty">
+      <p class="log-empty__line">no peers on the wire.</p>
+      <p class="log-empty__line log-empty__host">listening on <span id="emptyHost">—</span></p>
+      <span class="caret caret--breathe log-empty__block" aria-hidden="true"></span>
     </div>
   </main>
 
@@ -428,6 +463,12 @@
   const socket = io();
   let ME = '';
   const txtById = {};   // id → raw text (for copy)
+
+  // Reflect LAN/local host for the empty state.
+  addEventListener('DOMContentLoaded', () => {
+    const h = document.getElementById('emptyHost');
+    if (h) h.textContent = window.location.host || 'localhost';
+  });
 
   // ── Init ─────────────────────────────────────────────────
   addEventListener('DOMContentLoaded', () => {
