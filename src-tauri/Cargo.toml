@@ -12,14 +12,19 @@ name = "lan-chat"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+# (tauri-build removed; pure-rust GUI)
 
 [dependencies]
-tauri        = { version = "2", features = [] }
+# ── GUI ─────────────────────────────────────────────────
+eframe    = { version = "0.29", features = ["wgpu", "wayland", "x11"] }
+egui      = "0.29"
+egui_extras = { version = "0.29", features = ["all_loaders"] }
+arboard   = "3"
+rfd       = "0.14"
 
-axum         = { version = "0.7", features = ["ws"] }
+# ── Async / network (unchanged) ─────────────────────────
+axum         = { version = "0.7", features = ["ws", "multipart"] }
 tokio        = { version = "1", features = ["full"] }
-
 futures      = "0.3"
 mdns-sd      = "0.10"
 serde        = { version = "1", features = ["derive"] }
@@ -27,7 +32,12 @@ serde_json   = "1"
 uuid         = { version = "1", features = ["v4"] }
 if-addrs     = "0.13"
 dashmap      = "6"
-anyhow            = "1"
+anyhow       = "1"
 tokio-tungstenite = "0.24"
 tracing      = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ── File transfer ──────────────────────────────────────
+sha2        = "0.10"
+hex         = "0.4"
+bytes       = "1"

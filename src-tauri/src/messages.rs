@@ -7,6 +7,7 @@ pub const MAX_MESSAGES: usize = 200;
 /// Dedup window: track recently-seen message IDs to prevent P2P broadcast loops
 pub const DEDUP_WINDOW: usize = 500;
 
+/// On-the-wire message — text or clipboard or file metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -16,6 +17,22 @@ pub struct Message {
     #[serde(rename = "type")]
     pub msg_type: MsgType,
     pub ts: u64,
+    /// For `File` type: structured file metadata.
+    /// For `Text`/`Clipboard`: `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<FileMeta>,
+}
+
+/// File metadata shared alongside a `File` message.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FileMeta {
+    /// sha256 of the file contents, hex encoded. Also the dedup key.
+    pub sha256: String,
+    pub filename: String,
+    pub size: u64,
+    /// "ip:port" of the host that holds the body. Receiver can fetch from
+    /// `http://{addr}/files/{sha256}`.
+    pub addr: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,6 +40,7 @@ pub struct Message {
 pub enum MsgType {
     Text,
     Clipboard,
+    File,
 }
 
 impl Message {
@@ -38,6 +56,25 @@ impl Message {
             device: device.trim().chars().take(40).collect(),
             msg_type,
             ts,
+            file: None,
+        }
+    }
+
+    pub fn new_file(file: FileMeta, device: String) -> Self {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let rand: u32 = rand_u32();
+        // `text` for files carries a short human label; the real metadata is in `file`.
+        let label = format!("[file] {} ({} B)", file.filename, file.size);
+        Self {
+            id: format!("{}_{:05x}", ts, rand & 0xFFFFF),
+            text: label,
+            device: device.trim().chars().take(40).collect(),
+            msg_type: MsgType::File,
+            ts,
+            file: Some(file),
         }
     }
 }

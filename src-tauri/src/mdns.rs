@@ -5,12 +5,11 @@
 
 use crate::messages::Message;
 use crate::peers::{PeerCmd, PeerInfo};
-use crate::server::ServerState;
+use crate::server::{ServerState, UiEvent};
 use futures::{SinkExt, StreamExt};
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::Emitter;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMsg};
 
@@ -26,8 +25,6 @@ struct HelloMsg {
 }
 
 /// Register this node via mDNS and start browsing for peers.
-///
-/// `iface_ips` should be the list of local IPv4 addresses to advertise on.
 pub fn start_mdns(
     node_id: String,
     port: u16,
@@ -36,13 +33,10 @@ pub fn start_mdns(
 ) -> anyhow::Result<()> {
     let mdns = ServiceDaemon::new()?;
 
-    // Register one service instance per interface IP
     for ip in &iface_ips {
         let mut props: HashMap<String, String> = HashMap::new();
         props.insert("node_id".to_string(), node_id.clone());
 
-        // Instance name must be unique per IP to avoid collisions when advertising
-        // on multiple interfaces from the same host.
         let short_id = node_id.get(..8).unwrap_or(&node_id);
         let instance_name = format!("lanchat-{}-{}", short_id, ip.replace('.', "-"));
         let host_name = format!("{}.local.", hostname());
@@ -60,13 +54,12 @@ pub fn start_mdns(
         tracing::info!("mDNS registered on {}", ip);
     }
 
-    // Browse for peers on the same service type
     let receiver = mdns.browse(SERVICE_TYPE)?;
     let node_id_clone = node_id.clone();
     let state_clone = state.clone();
 
     tokio::spawn(async move {
-        let _mdns_keep_alive = mdns; // keep ServiceDaemon alive for task duration
+        let _mdns_keep_alive = mdns;
         while let Ok(event) = receiver.recv_async().await {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
@@ -89,12 +82,10 @@ async fn handle_resolved(info: ServiceInfo, my_node_id: &str, state: &ServerStat
         .unwrap_or("")
         .to_string();
 
-    // Skip self and unknown/empty node IDs
     if remote_node_id.is_empty() || remote_node_id == my_node_id {
         return;
     }
 
-    // Skip already-connected peers
     if state.pool.contains(&remote_node_id) {
         return;
     }
@@ -115,16 +106,17 @@ async fn handle_resolved(info: ServiceInfo, my_node_id: &str, state: &ServerStat
     });
 }
 
-/// Establish an outbound WebSocket connection to a discovered peer.
 pub async fn connect_to_peer(url: String, addr_str: String, state: ServerState) {
     let Ok((ws_stream, _)) = connect_async(&url).await else {
         tracing::warn!("Failed to connect to peer at {}", url);
+        let _ = state
+            .events
+            .send(UiEvent::Notice(format!("connect failed: {}", url)));
         return;
     };
 
     let (mut sink, mut stream) = ws_stream.split();
 
-    // 1. Send our hello
     let my_nick = state.nickname.read().await.clone();
     let hello = match serde_json::to_string(&HelloMsg {
         msg_type: "hello".into(),
@@ -140,11 +132,9 @@ pub async fn connect_to_peer(url: String, addr_str: String, state: ServerState) 
     };
 
     if sink.send(WsMsg::Text(hello)).await.is_err() {
-        tracing::warn!("Failed to send hello to {}", url);
         return;
     }
 
-    // 2. Wait for peer's hello response (server may send history first — skip non-hello frames)
     let peer_info = loop {
         match stream.next().await {
             Some(Ok(WsMsg::Text(t))) => {
@@ -157,7 +147,6 @@ pub async fn connect_to_peer(url: String, addr_str: String, state: ServerState) 
                         };
                     }
                 }
-                // Non-hello text (e.g. history envelope) — keep waiting
             }
             Some(Ok(WsMsg::Close(_))) | None => {
                 tracing::warn!("Connection to {} closed before hello", url);
@@ -167,24 +156,19 @@ pub async fn connect_to_peer(url: String, addr_str: String, state: ServerState) 
                 tracing::warn!("WS error waiting for hello from {}: {}", url, e);
                 return;
             }
-            _ => {
-                // Binary/Ping/Pong — ignore
-            }
+            _ => {}
         }
     };
 
-    // 3. Dedup check — guard against races (another task may have connected concurrently)
     if peer_info.node_id == state.node_id || state.pool.contains(&peer_info.node_id) {
         return;
     }
 
-    // 4. Register peer in pool
     let (tx, rx) = mpsc::unbounded_channel::<PeerCmd>();
     let node_id = peer_info.node_id.clone();
     state.pool.add(peer_info, tx);
-    emit_peer_update(&state);
+    let _ = state.events.send(UiEvent::Peers(state.pool.list()));
 
-    // 5. Spawn write task (inline tungstenite writer — axum's writer can't be reused here)
     let pool_clone = state.pool.clone();
     let node_id_write = node_id.clone();
     let state_write = state.clone();
@@ -192,21 +176,17 @@ pub async fn connect_to_peer(url: String, addr_str: String, state: ServerState) 
     tokio::spawn(async move {
         run_tungstenite_writer(sink, rx).await;
         pool_clone.remove(&node_id_write);
-        emit_peer_update(&state_write);
+        let _ = state_write.events.send(UiEvent::Peers(state_write.pool.list()));
     });
 
-    // 6. Read loop — receive messages (including any deferred history) from this peer
     while let Some(Ok(msg)) = stream.next().await {
         if let WsMsg::Text(t) = msg {
             handle_peer_message(&t, &node_id, &state);
         }
     }
-
-    // Writer task cleanup is handled in its own spawn above
 }
 
 fn handle_peer_message(json: &str, from_node_id: &str, state: &ServerState) {
-    // Check if this is a history envelope
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(json) {
         if let Some("history") = v.get("type").and_then(|t| t.as_str()) {
             if let Some(arr) = v.get("messages").and_then(|m| m.as_array()) {
@@ -214,7 +194,7 @@ fn handle_peer_message(json: &str, from_node_id: &str, state: &ServerState) {
                     match serde_json::from_value::<Message>(item.clone()) {
                         Ok(msg) => {
                             if state.store.insert(msg.clone()) {
-                                let _ = state.app.emit("message", &msg);
+                                let _ = state.events.send(UiEvent::Message(msg));
                             }
                         }
                         Err(e) => {
@@ -227,22 +207,14 @@ fn handle_peer_message(json: &str, from_node_id: &str, state: &ServerState) {
         }
     }
 
-    // Regular chat message
     if let Ok(msg) = serde_json::from_str::<Message>(json) {
         if state.store.insert(msg.clone()) {
             state.pool.broadcast(json, Some(from_node_id));
-            let _ = state.app.emit("message", &msg);
+            let _ = state.events.send(UiEvent::Message(msg));
         }
     }
 }
 
-fn emit_peer_update(state: &ServerState) {
-    let peers = state.pool.list();
-    let _ = state.app.emit("peer_update", &peers);
-}
-
-/// Tungstenite WebSocket write task for outbound connections.
-/// (Axum's WebSocket sink uses `axum::Error`; tokio-tungstenite uses `tungstenite::Error`.)
 async fn run_tungstenite_writer(
     mut sink: impl futures::Sink<WsMsg, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
     mut rx: mpsc::UnboundedReceiver<PeerCmd>,
