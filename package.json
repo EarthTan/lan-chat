@@ -1,13 +1,13 @@
 {
   "name": "lan-chat",
   "version": "1.0.0",
-  "description": "Pure-LAN real-time chat + clipboard sharing",
-  "main": "server.js",
+  "description": "Pure-LAN P2P chat desktop app",
   "scripts": {
-    "start": "node server.js"
+    "tauri": "cargo tauri",
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build"
   },
-  "dependencies": {
-    "express": "^4.18.0",
-    "socket.io": "^4.7.0"
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
   }
 }

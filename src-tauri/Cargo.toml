@@ -1,0 +1,32 @@
+[package]
+name = "lan-chat"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "lan_chat_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "lan-chat"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri        = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-shell = "2"
+axum         = { version = "0.7", features = ["ws"] }
+tokio        = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
+futures      = "0.3"
+mdns-sd      = "0.10"
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+uuid         = { version = "1", features = ["v4"] }
+if-addrs     = "0.13"
+dashmap      = "6"
+anyhow       = "1"
+tracing      = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
