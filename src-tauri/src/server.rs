@@ -45,30 +45,29 @@ pub struct ServerState {
 /// Start WebSocket server, trying ports 4242..4252.
 /// Returns the actual bound port.
 pub async fn start_server(state: ServerState) -> anyhow::Result<u16> {
-    let port = find_free_port(4242, 4252).await?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = find_free_port(4242, 4252).await?;
+    let port = listener.local_addr()?.port();
 
     let router = Router::new()
         .route("/ws", get(ws_handler))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("WebSocket server listening on {}", addr);
+    tracing::info!("WebSocket server listening on 0.0.0.0:{}", port);
 
     tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
+        if let Err(e) = axum::serve(listener, router).await {
+            tracing::error!("WebSocket server error: {}", e);
+        }
     });
 
     Ok(port)
 }
 
-async fn find_free_port(start: u16, end: u16) -> anyhow::Result<u16> {
+async fn find_free_port(start: u16, end: u16) -> anyhow::Result<tokio::net::TcpListener> {
     for port in start..=end {
-        if tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port)))
-            .await
-            .is_ok()
-        {
-            return Ok(port);
+        let addr = SocketAddr::from(([0, 0, 0, 0], port));
+        if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
+            return Ok(listener);
         }
     }
     anyhow::bail!("No free port found in range {}..{}", start, end)
