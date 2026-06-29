@@ -41,8 +41,7 @@ graph LR
 
 | 工具 | 版本 | 用途 |
 |---|---|---|
-| **Rust** | 1.75+ stable | 编译后端 |
-| **Node.js** | 18+ | 运行 `@tauri-apps/cli` |
+| **Rust** | 1.75+ stable | 编译后端 + Tauri CLI |
 | **Tauri 平台依赖** | 见下表 | WebView、系统库 |
 
 ### 平台依赖
@@ -72,11 +71,11 @@ sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
 git clone https://github.com/EarthTan/lan-chat.git
 cd lan-chat
 
-# 2. 安装前端工具（Tauri CLI）
-npm install
+# 2. 安装 Tauri CLI（仅首次需要，装一次全局可用）
+cargo install tauri-cli --version "^2.0" --locked
 
 # 3. 开发模式：编译 Rust + 启动桌面窗口
-npm run dev
+cargo tauri dev
 ```
 
 首次编译会拉取并编译 Tauri / Axum / mdns-sd 等依赖，请耐心等（5-15 分钟取决于网络与机器）。
@@ -84,7 +83,7 @@ npm run dev
 ## 构建发布版本
 
 ```bash
-npm run build
+cargo tauri build
 ```
 
 产物在 `src-tauri/target/release/bundle/`：
@@ -127,13 +126,14 @@ lan-chat/
 │   │   ├── peers.rs        # PeerPool：所有连接的状态管理
 │   │   ├── messages.rs     # Message 结构 + MessageStore（200 条环形缓冲）
 │   │   └── network.rs      # 列出本机网络接口
-│   ├── tauri.conf.json     # Tauri 窗口/打包配置
+│   ├── tauri.conf.json     # Tauri 窗口/打包配置（frontendDist 指向 ../src）
 │   ├── Cargo.toml
+│   ├── Cargo.lock
 │   └── build.rs
 ├── docs/
 │   ├── ARCHITECTURE.md     # 模块拆解与数据流
 │   └── PROTOCOL.md         # WebSocket / IPC 协议
-└── package.json            # 只为了 cargo tauri CLI
+└── .gitignore
 ```
 
 ## 已知限制
@@ -149,12 +149,12 @@ lan-chat/
 - 前端 DevTools：Tauri 窗口内默认可以右键 → Inspect Element（或开发模式下自动打开）
 - Rust 日志：使用 `tracing`，设置 `RUST_LOG=lanchat=debug` 看到详细日志
   ```bash
-  RUST_LOG=lanchat=debug npm run dev
+  RUST_LOG=lanchat=debug cargo tauri dev
   ```
 
 ## 贡献
 
-欢迎 PR 和 Issue。本地开发前请运行一次 `cargo build` 确认环境正常。
+欢迎 PR 和 Issue。本地开发前请运行 `cargo check` 确认环境正常。
 
 ## 许可
 
