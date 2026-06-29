@@ -1,4 +1,5 @@
 // lib.rs
+mod mdns;
 mod messages;
 mod network;
 mod peers;
