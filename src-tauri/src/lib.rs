@@ -1,6 +1,7 @@
 // lib.rs
 mod messages;
 mod network;
+mod peers;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
