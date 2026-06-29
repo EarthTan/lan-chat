@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod messages;
+mod network;
 
 fn main() {
     lan_chat_lib::run();
