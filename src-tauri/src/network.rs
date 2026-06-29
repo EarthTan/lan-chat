@@ -35,7 +35,10 @@ const LINK_LOCAL_PREFIX: [u8; 2] = [169, 254];
 pub fn get_candidate_interfaces() -> Vec<NetworkInterface> {
     let ifaces = match if_addrs::get_if_addrs() {
         Ok(i) => i,
-        Err(_) => return vec![],
+        Err(e) => {
+            tracing::warn!("if_addrs::get_if_addrs() failed: {}", e);
+            return vec![];
+        }
     };
 
     let mut result = Vec::new();
@@ -69,11 +72,6 @@ pub fn get_candidate_interfaces() -> Vec<NetworkInterface> {
             continue;
         }
 
-        // Only private RFC 1918 addresses
-        if !is_private_ipv4(&ip) {
-            continue;
-        }
-
         result.push(NetworkInterface {
             name,
             ip: ip.to_string(),
@@ -81,24 +79,31 @@ pub fn get_candidate_interfaces() -> Vec<NetworkInterface> {
         });
     }
 
-    // Remove exact duplicates (same name + same IP)
+    // Sort before deduping so non-consecutive duplicates are also caught
+    result.sort_by(|a, b| (&a.name, &a.ip).cmp(&(&b.name, &b.ip)));
     result.dedup_by(|a, b| a.name == b.name && a.ip == b.ip);
     result
 }
 
-fn is_private_ipv4(ip: &std::net::Ipv4Addr) -> bool {
-    let o = ip.octets();
-    // 10.0.0.0/8
-    if o[0] == 10 {
-        return true;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn excludes_loopback() {
+        // The actual filter is applied in get_candidate_interfaces via if_addrs.
+        // We test the name-prefix blacklist logic directly.
+        let excluded = HARD_EXCLUDE_PREFIXES;
+        assert!(excluded.iter().any(|p| "tailscale0".starts_with(p)));
+        assert!(excluded.iter().any(|p| "docker0".starts_with(p)));
+        assert!(excluded.iter().any(|p| "tun0".starts_with(p)));
+        assert!(excluded.iter().any(|p| "wg0".starts_with(p)));
+        assert!(excluded.iter().any(|p| "br-abc123".starts_with(p)));
+        // Real interfaces should NOT be excluded
+        assert!(!excluded.iter().any(|p| "wlp130s0".starts_with(p)));
+        assert!(!excluded.iter().any(|p| "eth0".starts_with(p)));
+        assert!(!excluded.iter().any(|p| "enp3s0".starts_with(p)));
+        assert!(!excluded.iter().any(|p| "thunderbolt0".starts_with(p)));
+        assert!(!excluded.iter().any(|p| "en0".starts_with(p)));
     }
-    // 172.16.0.0/12
-    if o[0] == 172 && (16..=31).contains(&o[1]) {
-        return true;
-    }
-    // 192.168.0.0/16
-    if o[0] == 192 && o[1] == 168 {
-        return true;
-    }
-    false
 }
