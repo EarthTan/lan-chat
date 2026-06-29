@@ -10,7 +10,6 @@ use futures::{SinkExt, StreamExt};
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMsg};
@@ -31,7 +30,6 @@ struct HelloMsg {
 /// `iface_ips` should be the list of local IPv4 addresses to advertise on.
 pub fn start_mdns(
     node_id: String,
-    _nickname: Arc<tokio::sync::RwLock<String>>,
     port: u16,
     iface_ips: Vec<String>,
     state: ServerState,
@@ -45,7 +43,8 @@ pub fn start_mdns(
 
         // Instance name must be unique per IP to avoid collisions when advertising
         // on multiple interfaces from the same host.
-        let instance_name = format!("lanchat-{}-{}", &node_id[..8], ip.replace('.', "-"));
+        let short_id = node_id.get(..8).unwrap_or(&node_id);
+        let instance_name = format!("lanchat-{}-{}", short_id, ip.replace('.', "-"));
         let host_name = format!("{}.local.", hostname());
 
         let service = ServiceInfo::new(
@@ -67,6 +66,7 @@ pub fn start_mdns(
     let state_clone = state.clone();
 
     tokio::spawn(async move {
+        let _mdns_keep_alive = mdns; // keep ServiceDaemon alive for task duration
         while let Ok(event) = receiver.recv_async().await {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
@@ -211,9 +211,14 @@ fn handle_peer_message(json: &str, from_node_id: &str, state: &ServerState) {
         if let Some("history") = v.get("type").and_then(|t| t.as_str()) {
             if let Some(arr) = v.get("messages").and_then(|m| m.as_array()) {
                 for item in arr {
-                    if let Ok(msg) = serde_json::from_value::<Message>(item.clone()) {
-                        if state.store.insert(msg.clone()) {
-                            let _ = state.app.emit("message", &msg);
+                    match serde_json::from_value::<Message>(item.clone()) {
+                        Ok(msg) => {
+                            if state.store.insert(msg.clone()) {
+                                let _ = state.app.emit("message", &msg);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to deserialize history message: {}", e);
                         }
                     }
                 }
