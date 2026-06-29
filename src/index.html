@@ -981,6 +981,7 @@
                 document.querySelectorAll(`#${id} .boot-dots span`);
             const bootSetOk = (id) => {
                 const t = bootTagFor(id);
+                console.log("bootSetOk:", id, "found:", !!t);
                 if (!t) return;
                 t.textContent = "[ OK ]";
                 t.dataset.state = "ok";
@@ -1020,7 +1021,17 @@
                 }
 
                 // Tauri is always connected — mark boot3 OK immediately
-                setTimeout(() => bootSetOk("boot3"), 360);
+                setTimeout(() => bootSetOk("boot3"), 100);
+
+                // Fallback: force boot all items on next animation frame
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        console.log("force-booting boot sequence");
+                        bootSetOk("boot1");
+                        bootSetOk("boot2");
+                        bootSetOk("boot3");
+                    });
+                });
 
                 // Load history
                 try {
