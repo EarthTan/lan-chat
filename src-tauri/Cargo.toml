@@ -15,11 +15,11 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri        = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-shell = "2"
+tauri        = { version = "2", features = [] }
+
 axum         = { version = "0.7", features = ["ws"] }
 tokio        = { version = "1", features = ["full"] }
-tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
+
 futures      = "0.3"
 mdns-sd      = "0.10"
 serde        = { version = "1", features = ["derive"] }
