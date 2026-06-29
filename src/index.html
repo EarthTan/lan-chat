@@ -962,8 +962,19 @@
         <script>
             // ────────────────────────────────────────────────────────
             // Tauri IPC bridge
+            console.log(
+                "JS starting, __TAURI__:",
+                typeof window.__TAURI__,
+                window.__TAURI__,
+            );
+            if (!window.__TAURI__) {
+                document.body.innerHTML =
+                    '<div style="color:red;padding:20px;font-family:monospace;">FATAL: window.__TAURI__ not available. Tauri IPC bridge missing.</div>';
+                throw new Error("__TAURI__ not defined");
+            }
             const { invoke } = window.__TAURI__.core;
             const { listen } = window.__TAURI__.event;
+            console.log("invoke:", typeof invoke, "listen:", typeof listen);
 
             let ME = "";
             const txtById = {}; // id → raw text (for copy)
