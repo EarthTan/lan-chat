@@ -2,6 +2,7 @@
 mod messages;
 mod network;
 mod peers;
+mod server;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
