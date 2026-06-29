@@ -5,6 +5,7 @@
 use crate::messages::{Message, MsgType};
 use crate::peers::PeerInfo;
 use crate::server::UiEvent;
+use crate::ui::clip_modal::{ClipModal, ClipOutcome};
 use crate::ui::setup::{SetupOutcome, SetupState};
 use crate::ui::theme::{color, font, space};
 use crate::{commands, AppHandle};
@@ -36,6 +37,14 @@ pub struct LanChatApp {
     ime_composing: bool,
     /// Cached local IP display string (first non-loopback iface + port).
     local_addr_display: String,
+    /// Clipboard share modal.
+    clip_modal: ClipModal,
+    /// File actions queued by file cards; drained each frame.
+    pending_file_actions: Vec<crate::ui::file_card::FileAction>,
+    /// Manual connect address text in status bar.
+    manual_addr: String,
+    /// Nickname edit text in status bar.
+    nickname_input: String,
 }
 
 struct Toast {
@@ -80,11 +89,15 @@ impl LanChatApp {
             peers,
             interfaces,
             port,
-            nickname: saved.unwrap_or_default(),
+            nickname: saved.as_deref().unwrap_or("").to_string(),
             input: String::new(),
             toast: None,
             ime_composing: false,
             local_addr_display,
+            clip_modal: ClipModal::new(),
+            pending_file_actions: Vec::new(),
+            manual_addr: String::new(),
+            nickname_input: saved.as_deref().unwrap_or("").to_string(),
         }
     }
 
@@ -169,6 +182,17 @@ impl LanChatApp {
                             .color(color::MUTED),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let clip_btn = egui::Button::new(
+                            RichText::new("[ CLIP ]")
+                                .font(font::mono(font::SM))
+                                .color(color::TEXT),
+                        )
+                        .fill(color::BG_ELEV)
+                        .stroke(egui::Stroke::new(1.0, color::LINE));
+                        if ui.add(clip_btn).clicked() {
+                            self.clip_modal.open();
+                        }
+                        ui.add_space(space::SM);
                         ui.label(
                             RichText::new(format!("[{}]", self.nickname))
                                 .font(font::mono(font::XS))
@@ -204,7 +228,10 @@ impl LanChatApp {
                                 });
                             } else {
                                 for m in &self.messages {
-                                    draw_message_row(ui, m, &self.nickname);
+                                    let actions = draw_message_row(ui, m, &self.nickname);
+                                    for a in actions {
+                                        self.pending_file_actions.push(a);
+                                    }
                                 }
                             }
                         });
@@ -220,6 +247,21 @@ impl LanChatApp {
                         ));
                     frame.show(ui, |ui| {
                         ui.horizontal(|ui| {
+                            // File picker button [ + ]
+                            let plus_btn = egui::Button::new(
+                                RichText::new("[ + ]")
+                                    .font(font::mono(font::SM))
+                                    .color(color::AMBER),
+                            )
+                            .fill(color::BG_ELEV)
+                            .stroke(egui::Stroke::new(1.0, color::LINE));
+                            if ui.add(plus_btn).clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_file() {
+                                    self.handle_local_file(path);
+                                }
+                            }
+                            ui.add_space(space::SM);
+
                             let resp = ui.add(
                                 TextEdit::singleline(&mut self.input)
                                     .font(font::mono(font::BASE))
@@ -229,7 +271,7 @@ impl LanChatApp {
                                             .font(font::mono(font::BASE))
                                             .color(color::MUTED),
                                     )
-                                    .desired_width(ui.available_width() - 80.0),
+                                    .desired_width(ui.available_width() - 100.0),
                             );
                             if resp.lost_focus()
                                 && ui.input(|i| i.key_pressed(Key::Enter))
@@ -285,6 +327,59 @@ impl LanChatApp {
                             .font(font::mono(font::XS))
                             .color(color::MUTED),
                     );
+
+                    // spacer pushes the rest to the right
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let connect_btn = egui::Button::new(
+                            RichText::new("[ CONNECT ]")
+                                .font(font::mono(font::XS))
+                                .color(color::GREEN),
+                        )
+                        .fill(color::BG_ELEV)
+                        .stroke(egui::Stroke::new(1.0, color::LINE));
+                        if ui.add(connect_btn).clicked() {
+                            self.show_toast("enter IP:port in the input bar above");
+                        }
+                        ui.add_space(space::SM);
+                        let resp = ui.add(
+                            TextEdit::singleline(&mut self.manual_addr)
+                                .font(font::mono(font::XS))
+                                .text_color(color::TEXT)
+                                .hint_text(
+                                    RichText::new("IP:port")
+                                        .font(font::mono(font::XS))
+                                        .color(color::MUTED),
+                                )
+                                .desired_width(120.0),
+                        );
+                        if resp.lost_focus()
+                            && ui.input(|i| i.key_pressed(Key::Enter))
+                            && !self.manual_addr.is_empty()
+                        {
+                            self.try_manual_connect();
+                        }
+
+                        ui.add_space(space::SM);
+
+                        // Nickname editor
+                        let nick_resp = ui.add(
+                            TextEdit::singleline(&mut self.nickname_input)
+                                .font(font::mono(font::XS))
+                                .text_color(color::TEXT)
+                                .hint_text(
+                                    RichText::new("nickname")
+                                        .font(font::mono(font::XS))
+                                        .color(color::MUTED),
+                                )
+                                .desired_width(120.0),
+                        );
+                        if nick_resp.lost_focus()
+                            && ui.input(|i| i.key_pressed(Key::Enter))
+                            && !self.nickname_input.is_empty()
+                        {
+                            self.try_set_nickname();
+                        }
+                    });
                 });
             });
 
@@ -309,6 +404,42 @@ impl LanChatApp {
                         });
                 });
         }
+
+        // ── Clipboard modal overlay ─────────────────────────
+        if self.clip_modal.open {
+            egui::Area::new(egui::Id::new("clip_overlay"))
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .fixed_pos(ctx.screen_rect().center())
+                .show(ctx, |ui| {
+                    // Backdrop
+                    let screen = ctx.screen_rect();
+                    ui.painter().rect_filled(
+                        screen,
+                        0.0,
+                        eframe::egui::Color32::from_black_alpha(160),
+                    );
+                    let outcome =
+                        crate::ui::clip_modal::ui(ui, &mut self.clip_modal);
+                    match outcome {
+                        ClipOutcome::Pending => {}
+                        ClipOutcome::Send(text) => {
+                            let state = self.handle.server_state.clone();
+                            self.handle.runtime.spawn(async move {
+                                if let Err(e) = commands::send_message(
+                                    &state, text, "clipboard".into(),
+                                ).await {
+                                    tracing::warn!("send clipboard failed: {}", e);
+                                }
+                            });
+                            self.clip_modal.open = false;
+                            self.show_toast("transmitted");
+                        }
+                        ClipOutcome::Close => {
+                            self.clip_modal.open = false;
+                        }
+                    }
+                });
+        }
     }
 
     fn try_send_text(&mut self) {
@@ -324,6 +455,128 @@ impl LanChatApp {
             }
         });
         self.input.clear();
+    }
+
+    fn try_manual_connect(&mut self) {
+        let raw = self.manual_addr.trim().to_string();
+        if raw.is_empty() {
+            return;
+        }
+        let (ip, port) = match raw.split_once(':') {
+            Some((i, p)) => (i.to_string(), p.parse::<u16>().ok()),
+            None => (raw.clone(), None),
+        };
+        let state = self.handle.server_state.clone();
+        self.handle.runtime.spawn(async move {
+            if let Err(e) = commands::connect_peer(state, ip, port).await {
+                tracing::warn!("connect_peer failed: {}", e);
+            }
+        });
+        self.manual_addr.clear();
+        self.show_toast("connecting…");
+    }
+
+    fn try_set_nickname(&mut self) {
+        let n = self.nickname_input.trim().to_string();
+        if n.is_empty() {
+            return;
+        }
+        let state = self.handle.server_state.clone();
+        let n_clone = n.clone();
+        self.handle.runtime.spawn(async move {
+            let _ = commands::set_nickname(&state, n_clone).await;
+        });
+        self.nickname = n;
+        self.show_toast("nickname updated");
+    }
+
+    fn handle_file_action(&mut self, a: crate::ui::file_card::FileAction) {
+        use crate::ui::file_card::FileAction;
+        match a {
+            FileAction::SaveLocal { sha256, suggested_name } => {
+                let state = self.handle.server_state.clone();
+                let events = self.handle.server_state.events.clone();
+                self.handle.runtime.spawn(async move {
+                    let body = match state.transfers.get(&sha256) {
+                        Some(b) => b,
+                        None => {
+                            let _ = events.send(UiEvent::Notice("file not in cache".into()));
+                            return;
+                        }
+                    };
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_file_name(&suggested_name)
+                        .save_file()
+                    {
+                        if let Err(e) = std::fs::write(&path, &body) {
+                            let _ = events.send(UiEvent::Notice(format!("save failed: {}", e)));
+                        } else {
+                            let _ = events.send(UiEvent::Notice(format!("saved {}", path.display())));
+                        }
+                    }
+                });
+            }
+            FileAction::SaveRemote { addr, sha256, suggested_name } => {
+                let events = self.handle.server_state.events.clone();
+                self.handle.runtime.spawn(async move {
+                    let body = match commands::download_file(&addr, &sha256).await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            let _ = events.send(UiEvent::Notice(format!("download failed: {}", e)));
+                            return;
+                        }
+                    };
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_file_name(&suggested_name)
+                        .save_file()
+                    {
+                        if let Err(e) = std::fs::write(&path, &body) {
+                            let _ = events.send(UiEvent::Notice(format!("save failed: {}", e)));
+                        } else {
+                            let _ = events.send(UiEvent::Notice(format!("saved {}", path.display())));
+                        }
+                    }
+                });
+            }
+            FileAction::Open(_path) => {
+                // not implemented in v1
+            }
+        }
+    }
+
+    fn handle_local_file(&mut self, path: std::path::PathBuf) {
+        let state = self.handle.server_state.clone();
+        let events = self.handle.server_state.events.clone();
+        self.handle.runtime.spawn(async move {
+            let body = match std::fs::read(&path) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = events.send(UiEvent::Notice(format!("read failed: {}", e)));
+                    return;
+                }
+            };
+            use sha2::Digest;
+            let mut hasher = sha2::Sha256::new();
+            Digest::update(&mut hasher, &body);
+            let sha256 = hex::encode(Digest::finalize(hasher));
+            let size = body.len() as u64;
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file")
+                .to_string();
+            let file = crate::messages::FileMeta {
+                sha256,
+                filename,
+                size,
+                addr: state.self_addr.read().await.clone().unwrap_or_default(),
+            };
+            if let Err(e) = commands::broadcast_file(&state, file, body).await {
+                let _ = events.send(UiEvent::Notice(format!("send failed: {}", e)));
+            } else {
+                let _ = events.send(UiEvent::Notice("file sent".into()));
+            }
+        });
     }
 }
 
@@ -358,13 +611,31 @@ impl eframe::App for LanChatApp {
                 self.toast = None;
             }
         }
+
+        // Process file card actions
+        let actions: Vec<_> = self.pending_file_actions.drain(..).collect();
+        for a in actions {
+            self.handle_file_action(a);
+        }
+
+        // Dropped files (drag & drop)
+        let dropped: Vec<_> = ctx.input(|i| i.raw.dropped_files.clone());
+        for d in dropped {
+            if let Some(path) = d.path {
+                self.handle_local_file(path);
+            }
+        }
     }
 }
 
-fn draw_message_row(ui: &mut egui::Ui, m: &Message, me: &str) {
+fn draw_message_row(ui: &mut egui::Ui, m: &Message, me: &str) -> Vec<crate::ui::file_card::FileAction> {
+    // File messages render as a card
+    if matches!(m.msg_type, MsgType::File) {
+        return crate::ui::file_card::draw(ui, m, me);
+    }
+
     let is_me = m.device == me;
     let is_clip = matches!(m.msg_type, MsgType::Clipboard);
-    let _is_file = matches!(m.msg_type, MsgType::File);
     let color_msg = if is_clip {
         color::GREEN
     } else if is_me {
@@ -392,16 +663,7 @@ fn draw_message_row(ui: &mut egui::Ui, m: &Message, me: &str) {
                 .color(color_msg),
         );
     });
-    if let Some(file) = &m.file {
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(space::LG);
-            ui.label(
-                RichText::new(format!("sha256:{}  size:{}B", &file.sha256[..12], file.size))
-                    .font(font::mono(font::XS))
-                    .color(color::MUTED),
-            );
-        });
-    }
+    Vec::new()
 }
 
 fn format_ts(ts: u64) -> String {
