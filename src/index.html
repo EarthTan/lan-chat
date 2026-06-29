@@ -962,19 +962,8 @@
         <script>
             // ────────────────────────────────────────────────────────
             // Tauri IPC bridge
-            console.log(
-                "JS starting, __TAURI__:",
-                typeof window.__TAURI__,
-                window.__TAURI__,
-            );
-            if (!window.__TAURI__) {
-                document.body.innerHTML =
-                    '<div style="color:red;padding:20px;font-family:monospace;">FATAL: window.__TAURI__ not available. Tauri IPC bridge missing.</div>';
-                throw new Error("__TAURI__ not defined");
-            }
             const { invoke } = window.__TAURI__.core;
             const { listen } = window.__TAURI__.event;
-            console.log("invoke:", typeof invoke, "listen:", typeof listen);
 
             let ME = "";
             const txtById = {}; // id → raw text (for copy)
@@ -992,7 +981,6 @@
                 document.querySelectorAll(`#${id} .boot-dots span`);
             const bootSetOk = (id) => {
                 const t = bootTagFor(id);
-                console.log("bootSetOk:", id, "found:", !!t);
                 if (!t) return;
                 t.textContent = "[ OK ]";
                 t.dataset.state = "ok";
@@ -1032,17 +1020,7 @@
                 }
 
                 // Tauri is always connected — mark boot3 OK immediately
-                setTimeout(() => bootSetOk("boot3"), 100);
-
-                // Fallback: force boot all items on next animation frame
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        console.log("force-booting boot sequence");
-                        bootSetOk("boot1");
-                        bootSetOk("boot2");
-                        bootSetOk("boot3");
-                    });
-                });
+                setTimeout(() => bootSetOk("boot3"), 360);
 
                 // Load history
                 try {
@@ -1078,7 +1056,6 @@
             });
 
             function saveName() {
-                console.log("saveName called");
                 const inp = document.getElementById("nameIn");
                 const wrap = document.getElementById("setupInputWrap");
                 const v = inp.value.trim();
