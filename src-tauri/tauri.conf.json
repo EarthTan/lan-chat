@@ -2,9 +2,9 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LAN Chat",
   "version": "1.0.0",
-  "identifier": "io.github.lanchat",
+  "identifier": "io.github.earthtan.lan-chat",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../frontend"
   },
   "app": {
     "windows": [

@@ -6,7 +6,7 @@
 
 LAN Chat 是一个 **Tauri 2 桌面应用**，分两层：
 
-- **前端（WebView）**：单个 `src/index.html`，原生 JS，零打包。通过 Tauri 提供的 `window.__TAURI__` 全局对象与 Rust 后端通信。
+- **前端（WebView）**：单个 `frontend/index.html`，原生 JS，零打包。通过 Tauri 提供的 `window.__TAURI__` 全局对象与 Rust 后端通信。
 - **后端（Rust）**：`src-tauri/src/` 下的多个模块协作，负责 WebSocket 服务、mDNS 发现、连接池、消息存储。
 
 进程边界由 Tauri 管理；前后端在同一个进程内，IPC 走 `invoke`（请求-响应）和 `emit/listen`（事件推送）。
@@ -43,7 +43,7 @@ sequenceDiagram
     T->>M: start_mdns(node_id, port, ips, state)
     M->>M: 注册 _lanchat._tcp.local.
     M->>M: 浏览同类型服务
-    T->>W: 创建窗口，加载 src/index.html
+    T->>W: 创建窗口，加载 frontend/index.html
     W->>T: invoke("get_history")
     W->>T: invoke("get_port")
     W->>T: invoke("get_interfaces")

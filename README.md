@@ -114,7 +114,7 @@ WebSocket 上的所有消息都是 JSON。完整协议见 [`docs/PROTOCOL.md`](d
 
 ```
 lan-chat/
-├── src/                    # 前端：单个 index.html（被 Tauri 直接加载）
+├── frontend/               # 前端：单个 index.html（被 Tauri 直接加载，无打包）
 │   └── index.html
 ├── src-tauri/              # Rust 后端
 │   ├── src/
@@ -126,7 +126,7 @@ lan-chat/
 │   │   ├── peers.rs        # PeerPool：所有连接的状态管理
 │   │   ├── messages.rs     # Message 结构 + MessageStore（200 条环形缓冲）
 │   │   └── network.rs      # 列出本机网络接口
-│   ├── tauri.conf.json     # Tauri 窗口/打包配置（frontendDist 指向 ../src）
+│   ├── tauri.conf.json     # Tauri 窗口/打包配置（frontendDist 指向 ../frontend）
 │   ├── Cargo.toml
 │   ├── Cargo.lock
 │   └── build.rs
