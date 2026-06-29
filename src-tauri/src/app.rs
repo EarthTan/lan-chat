@@ -202,99 +202,101 @@ impl LanChatApp {
                 });
             });
 
-        // ── Center: log + input bar ──────────────────────────
+        // ── Center: log only (input is a separate bottom panel below) ──
         CentralPanel::default()
             .frame(egui::Frame::none().fill(color::BG))
             .show(ctx, |ui| {
-                ui.vertical(|ui| {
-                    // Log area
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            if self.messages.is_empty() {
-                                ui.add_space(space::XXL);
-                                ui.vertical_centered(|ui| {
-                                    ui.label(
-                                        RichText::new("no peers on the wire.")
-                                            .font(font::mono(font::BASE))
-                                            .color(color::MUTED),
-                                    );
-                                    ui.label(
-                                        RichText::new(format!("listening on {}", self.local_addr_display))
-                                            .font(font::mono(font::SM))
-                                            .color(color::MUTED),
-                                    );
-                                });
-                            } else {
-                                for m in &self.messages {
-                                    let actions = draw_message_row(ui, m, &self.nickname);
-                                    for a in actions {
-                                        self.pending_file_actions.push(a);
-                                    }
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if self.messages.is_empty() {
+                            ui.add_space(space::XXL);
+                            ui.vertical_centered(|ui| {
+                                ui.label(
+                                    RichText::new("no peers on the wire.")
+                                        .font(font::mono(font::BASE))
+                                        .color(color::MUTED),
+                                );
+                                ui.label(
+                                    RichText::new(format!("listening on {}", self.local_addr_display))
+                                        .font(font::mono(font::SM))
+                                        .color(color::MUTED),
+                                );
+                            });
+                        } else {
+                            for m in &self.messages {
+                                let actions = draw_message_row(ui, m, &self.nickname);
+                                for a in actions {
+                                    self.pending_file_actions.push(a);
                                 }
                             }
-                        });
+                        }
+                    });
+            });
 
+        // ── Input bar (its own bottom panel — always visible) ──
+        TopBottomPanel::bottom("input_bar")
+            .resizable(false)
+            .frame(
+                egui::Frame::none()
+                    .fill(color::BG)
+                    .inner_margin(egui::Margin::symmetric(space::LG, space::MD)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    // File picker button [ + ]
+                    let plus_btn = egui::Button::new(
+                        RichText::new("[ + ]")
+                            .font(font::mono(font::SM))
+                            .color(color::AMBER),
+                    )
+                    .fill(color::BG_ELEV)
+                    .stroke(egui::Stroke::new(1.0, color::LINE));
+                    if ui.add(plus_btn).clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.handle_local_file(path);
+                        }
+                    }
                     ui.add_space(space::SM);
 
-                    // Input bar
-                    let frame = egui::Frame::none()
-                        .fill(color::BG)
-                        .inner_margin(egui::Margin::symmetric(
-                            space::LG,
-                            space::MD,
-                        ));
-                    frame.show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            // File picker button [ + ]
-                            let plus_btn = egui::Button::new(
-                                RichText::new("[ + ]")
-                                    .font(font::mono(font::SM))
-                                    .color(color::AMBER),
-                            )
-                            .fill(color::BG_ELEV)
-                            .stroke(egui::Stroke::new(1.0, color::LINE));
-                            if ui.add(plus_btn).clicked() {
-                                if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                    self.handle_local_file(path);
-                                }
-                            }
-                            ui.add_space(space::SM);
-
-                            let resp = ui.add(
-                                TextEdit::singleline(&mut self.input)
+                    let resp = ui.add(
+                        TextEdit::singleline(&mut self.input)
+                            .font(font::mono(font::BASE))
+                            .text_color(color::TEXT)
+                            .hint_text(
+                                RichText::new("type a message…")
                                     .font(font::mono(font::BASE))
-                                    .text_color(color::TEXT)
-                                    .hint_text(
-                                        RichText::new("type a message…")
-                                            .font(font::mono(font::BASE))
-                                            .color(color::MUTED),
-                                    )
-                                    .desired_width(ui.available_width() - 100.0),
-                            );
-                            if resp.lost_focus()
-                                && ui.input(|i| i.key_pressed(Key::Enter))
-                                && !self.ime_composing
-                            {
-                                self.try_send_text();
-                            }
-                            let send_btn = egui::Button::new(
-                                RichText::new("[ ↵ ]")
-                                    .font(font::mono(font::SM))
-                                    .color(if self.input.is_empty() {
-                                        color::MUTED
-                                    } else {
-                                        color::AMBER
-                                    }),
+                                    .color(color::MUTED),
                             )
-                            .fill(color::BG_ELEV)
-                            .stroke(egui::Stroke::new(1.0, color::LINE));
-                            if ui.add(send_btn).clicked() {
-                                self.try_send_text();
-                            }
-                        });
-                    });
+                            .desired_width(ui.available_width() - 100.0),
+                    );
+                    if resp.lost_focus()
+                        && ui.input(|i| i.key_pressed(Key::Enter))
+                        && !self.ime_composing
+                    {
+                        self.try_send_text();
+                    }
+                    if resp.has_focus()
+                        && ui.input(|i| i.key_pressed(Key::Enter))
+                        && !self.ime_composing
+                    {
+                        self.try_send_text();
+                    }
+                    let send_btn = egui::Button::new(
+                        RichText::new("[ ↵ ]")
+                            .font(font::mono(font::SM))
+                            .color(if self.input.is_empty() {
+                                color::MUTED
+                            } else {
+                                color::AMBER
+                            }),
+                    )
+                    .fill(color::BG_ELEV)
+                    .stroke(egui::Stroke::new(1.0, color::LINE));
+                    if ui.add(send_btn).clicked() {
+                        self.try_send_text();
+                    }
                 });
             });
 
