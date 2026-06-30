@@ -35,6 +35,12 @@ pub struct LanChatApp {
     toast: Option<Toast>,
     /// IME composition flag.
     ime_composing: bool,
+    /// Set by `try_send_text` so the input bar clears on the *next* frame
+    /// after `update` runs. This gives any `Ime::Commit` event that winit
+    /// delivered in the same OS event batch a chance to land in `self.input`
+    /// before we wipe it — fixing the same-frame race where a RIME Enter-to-
+    /// commit would silently lose the committed character.
+    pending_clear_input: bool,
     /// Cached local IP display string (first non-loopback iface + port).
     local_addr_display: String,
     /// Clipboard share modal.
@@ -93,6 +99,7 @@ impl LanChatApp {
             input: String::new(),
             toast: None,
             ime_composing: false,
+            pending_clear_input: false,
             local_addr_display,
             clip_modal: ClipModal::new(),
             pending_file_actions: Vec::new(),
@@ -262,6 +269,7 @@ impl LanChatApp {
 
                     let resp = ui.add(
                         TextEdit::singleline(&mut self.input)
+                            .id_source("input_bar_field")
                             .font(font::mono(font::BASE))
                             .text_color(color::TEXT)
                             .hint_text(
@@ -345,6 +353,7 @@ impl LanChatApp {
                         ui.add_space(space::SM);
                         let resp = ui.add(
                             TextEdit::singleline(&mut self.manual_addr)
+                                .id_source("manual_addr_field")
                                 .font(font::mono(font::XS))
                                 .text_color(color::TEXT)
                                 .hint_text(
@@ -366,6 +375,7 @@ impl LanChatApp {
                         // Nickname editor
                         let nick_resp = ui.add(
                             TextEdit::singleline(&mut self.nickname_input)
+                                .id_source("nickname_field")
                                 .font(font::mono(font::XS))
                                 .text_color(color::TEXT)
                                 .hint_text(
@@ -456,7 +466,17 @@ impl LanChatApp {
                 tracing::warn!("send_message failed: {}", e);
             }
         });
-        self.input.clear();
+        // Defer the clear to the next frame so a same-frame `Ime::Commit`
+        // event (typical with RIME Enter-to-commit on Linux) can land in
+        // `self.input` first. The actual `clear()` happens at the top of
+        // `App::update` via `pending_clear_input`.
+        self.pending_clear_input = true;
+
+        // Snap focus back to the input bar so the user can keep typing
+        // the next message without reaching for the mouse — whether the
+        // send was triggered by Enter or by clicking the [↵] button.
+        self.egui_ctx
+            .memory_mut(|m| m.request_focus(egui::Id::new("input_bar_field")));
     }
 
     fn try_manual_connect(&mut self) {
@@ -586,25 +606,89 @@ impl eframe::App for LanChatApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
 
+        // Apply the deferred input-bar clear from the previous frame
+        // BEFORE we drain IME events, so a same-frame `Ime::Commit`
+        // gets a chance to land in `self.input` first.
+        if self.pending_clear_input {
+            self.input.clear();
+            self.pending_clear_input = false;
+        }
+
+        // ── IME drain (workaround for egui-winit 0.30 dropping
+        //    `Ime::Commit` on Linux + `TextEdit::singleline`, see
+        //    emilk/egui#5683 / emilk/egui-winit#254).
+        //
+        // We manually observe `egui::Event::Ime(...)` and:
+        //   - keep `ime_composing` in sync (previously dead state)
+        //   - forward `Commit(s)` into the focused TextEdit's backing
+        //     String, bypassing the egui-winit drop bug.
+        //
+        // Only the input bar and nickname/addr editors need this —
+        // the rest of the UI is read-only.
+        let focused_id = ctx.memory(|m| m.focused());
+        ctx.input(|i| {
+            for ev in &i.events {
+                if let egui::Event::Ime(ime) = ev {
+                    match ime {
+                        egui::ImeEvent::Enabled
+                        | egui::ImeEvent::Preedit(_) => {
+                            self.ime_composing = true;
+                        }
+                        egui::ImeEvent::Disabled
+                        | egui::ImeEvent::Commit(_) => {
+                            self.ime_composing = false;
+                        }
+                    }
+                    if let egui::ImeEvent::Commit(text) = ime {
+                        if !text.is_empty() {
+                            let target = match focused_id {
+                                Some(id) if id == egui::Id::new("input_bar_field") => {
+                                    Some(&mut self.input)
+                                }
+                                Some(id) if id == egui::Id::new("manual_addr_field") => {
+                                    Some(&mut self.manual_addr)
+                                }
+                                Some(id) if id == egui::Id::new("nickname_field") => {
+                                    Some(&mut self.nickname_input)
+                                }
+                                _ => None,
+                            };
+                            if let Some(buf) = target {
+                                buf.push_str(text);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        // Note: re-entering `ctx.input(|i| ...)` multiple times in the
+        // same frame is the documented pattern; egui drains events into
+        // the input state once per frame at the top of `update`, so
+        // subsequent reads of `i.events` are stable within this frame.
+
+        // (kept for clarity — the legacy Enter-guard comments around
+        //  `try_send_text` rely on `ime_composing` being correct, which
+        //  the drain above now guarantees.)
+
+        // Tick the boot step visual. Run on every frame so the [..] → [OK]
+        // sequence is visible *while* the setup overlay is still up — not
+        // only after the user submits a name.
+        let elapsed = self.boot_anim_t.elapsed().as_millis();
+        let step = if elapsed > 600 {
+            3
+        } else if elapsed > 400 {
+            2
+        } else if elapsed > 200 {
+            1
+        } else {
+            0
+        };
+        self.setup.boot_step = step;
+
         if !self.ready {
             self.draw_setup(ctx);
         } else {
             self.draw_main(ctx);
-        }
-
-        // Tick the boot step visual once ready
-        if self.ready {
-            let elapsed = self.boot_anim_t.elapsed().as_millis();
-            let step = if elapsed > 600 {
-                3
-            } else if elapsed > 400 {
-                2
-            } else if elapsed > 200 {
-                1
-            } else {
-                0
-            };
-            self.setup.boot_step = step;
         }
 
         // Toast auto-dismiss after 1.8s

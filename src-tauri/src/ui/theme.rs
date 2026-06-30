@@ -104,13 +104,27 @@ pub fn install(ctx: &egui::Context) {
     style.visuals.faint_bg_color = color::BG_ELEV;
     ctx.set_style(style);
 
-    // Also install a slightly larger default font for clarity
+    // ── CJK fallback font ──────────────────────────────────
+    // The egui/eframe default `Monospace` family on Linux/macOS/Windows only
+    // covers Latin, so CJK codepoints rendered via cosmic-text end up as
+    // mojibake or `U+FFFD`. We bundle a subset of Sarasa Mono SC (OFL-1.1,
+    // derived from be5invis/Sarasa-Gothic) as a fallback at the END of both
+    // the Monospace and Proportional chains — Latin stays on the system mono
+    // for consistency, CJK silently falls through to Sarasa.
     let mut fonts = egui::FontDefinitions::default();
-    // (System mono fallback is already configured by eframe. We rely on it; no
-    // bundled font asset needed for the v1 — keeps the binary small.)
-    fonts
-        .families
-        .entry(FontFamily::Monospace)
-        .or_insert_with(Default::default);
+    fonts.font_data.insert(
+        "cjk".into(),
+        egui::FontData::from_static(include_bytes!(
+            "../../assets/fonts/sarasa-mono-sc-subset.ttf"
+        ))
+        .into(),
+    );
+    for family in [FontFamily::Monospace, FontFamily::Proportional] {
+        fonts
+            .families
+            .entry(family)
+            .or_default()
+            .push("cjk".into());
+    }
     ctx.set_fonts(fonts);
 }

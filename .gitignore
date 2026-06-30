@@ -3,3 +3,8 @@ docs/superpowers/plans/screenshots/
 .DS_Store
 /.claude
 /src-tauri/target/
+
+# Font build cache: downloaded upstream TTC + fontTools venv (created by
+# scripts/build_font.sh). The 793 MB super-TTC and the ~17 MB venv should
+# never enter the repo — only the resulting subset TTF and its license.
+/scripts/cache/
