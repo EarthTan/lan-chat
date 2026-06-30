@@ -306,12 +306,15 @@ impl LanChatApp {
                     {
                         self.try_send_text();
                     }
-                    if resp.has_focus()
-                        && ui.input(|i| i.key_pressed(Key::Enter))
-                        && !self.ime_composing
-                    {
-                        self.try_send_text();
-                    }
+                    // NOTE: do NOT add a sibling `resp.has_focus() && Enter`
+                    // guard. `TextEdit::singleline` surrender_focuses on Enter
+                    // (egui 0.29 builder.rs:963), so `lost_focus() && Enter`
+                    // above already covers every Enter case. Adding a
+                    // `has_focus() && Enter` guard too causes a SECOND send
+                    // because `try_send_text` calls `request_focus` which
+                    // synchronously flips `has_focus()` back to true within
+                    // the same frame — `key_pressed(Enter)` is still true,
+                    // so the second guard fires.
                     let send_btn = egui::Button::new(
                         RichText::new("[ ↵ ]")
                             .font(font::mono(font::SM))
