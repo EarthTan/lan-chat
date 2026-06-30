@@ -41,6 +41,17 @@ pub struct LanChatApp {
     /// before we wipe it — fixing the same-frame race where a RIME Enter-to-
     /// commit would silently lose the committed character.
     pending_clear_input: bool,
+    /// Real widget id of the chat input `TextEdit`, captured each frame
+    /// from `resp.id`. Needed because egui composes the id from the
+    /// current UI's parent id and the `id_source` salt — it is NOT
+    /// equal to `Id::new("input_bar_field")`. Used to snap focus back
+    /// to the input bar after sending, and to identify the field in
+    /// the IME drain.
+    input_field_id: Option<egui::Id>,
+    /// Same idea for the manual-connect IP:port input in the status bar.
+    manual_addr_field_id: Option<egui::Id>,
+    /// Same idea for the nickname-edit input in the status bar.
+    nickname_field_id: Option<egui::Id>,
     /// Cached local IP display string (first non-loopback iface + port).
     local_addr_display: String,
     /// Clipboard share modal.
@@ -100,6 +111,9 @@ impl LanChatApp {
             toast: None,
             ime_composing: false,
             pending_clear_input: false,
+            input_field_id: None,
+            manual_addr_field_id: None,
+            nickname_field_id: None,
             local_addr_display,
             clip_modal: ClipModal::new(),
             pending_file_actions: Vec::new(),
@@ -279,6 +293,13 @@ impl LanChatApp {
                             )
                             .desired_width(ui.available_width() - 100.0),
                     );
+                    // Capture the widget's actual runtime id. egui composes
+                    // the id from the current UI's parent id and the
+                    // `id_source` salt, so it is NOT equal to
+                    // `Id::new("input_bar_field")`. We need the real id
+                    // to (a) snap focus back to the input bar after a
+                    // send and (b) identify the field in the IME drain.
+                    self.input_field_id = Some(resp.id);
                     if resp.lost_focus()
                         && ui.input(|i| i.key_pressed(Key::Enter))
                         && !self.ime_composing
@@ -363,6 +384,7 @@ impl LanChatApp {
                                 )
                                 .desired_width(120.0),
                         );
+                        self.manual_addr_field_id = Some(resp.id);
                         if resp.lost_focus()
                             && ui.input(|i| i.key_pressed(Key::Enter))
                             && !self.manual_addr.is_empty()
@@ -385,6 +407,7 @@ impl LanChatApp {
                                 )
                                 .desired_width(120.0),
                         );
+                        self.nickname_field_id = Some(nick_resp.id);
                         if nick_resp.lost_focus()
                             && ui.input(|i| i.key_pressed(Key::Enter))
                             && !self.nickname_input.is_empty()
@@ -475,8 +498,9 @@ impl LanChatApp {
         // Snap focus back to the input bar so the user can keep typing
         // the next message without reaching for the mouse — whether the
         // send was triggered by Enter or by clicking the [↵] button.
-        self.egui_ctx
-            .memory_mut(|m| m.request_focus(egui::Id::new("input_bar_field")));
+        if let Some(id) = self.input_field_id {
+            self.egui_ctx.memory_mut(|m| m.request_focus(id));
+        }
     }
 
     fn try_manual_connect(&mut self) {
@@ -641,14 +665,19 @@ impl eframe::App for LanChatApp {
                     }
                     if let egui::ImeEvent::Commit(text) = ime {
                         if !text.is_empty() {
+                            // Match the focused widget by its REAL runtime
+                            // id (captured each frame into the *_field_id
+                            // fields), not by `Id::new("..._field")` — those
+                            // are salta and never equal to the composed
+                            // widget id.
                             let target = match focused_id {
-                                Some(id) if id == egui::Id::new("input_bar_field") => {
+                                Some(id) if Some(id) == self.input_field_id => {
                                     Some(&mut self.input)
                                 }
-                                Some(id) if id == egui::Id::new("manual_addr_field") => {
+                                Some(id) if Some(id) == self.manual_addr_field_id => {
                                     Some(&mut self.manual_addr)
                                 }
-                                Some(id) if id == egui::Id::new("nickname_field") => {
+                                Some(id) if Some(id) == self.nickname_field_id => {
                                     Some(&mut self.nickname_input)
                                 }
                                 _ => None,
